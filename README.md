@@ -20,6 +20,7 @@ TCL stands for Tool Command Language and was created by John Ousterhout in the l
 
 We need to create a command 'vsdsynth' that takes .csv file as input from UNIX shell to TCL script. The command can be created using the following steps:
 1. Let the system know that its a UNIX script
+
 ` #! /bin/tcsh -f `
 
 2. Creating logo
@@ -51,6 +52,12 @@ echo "						******** A vlsisystemdesign.com initiative ********"
 echo ""
 ```
 
+You can run the command by typing the following command in the prompt. NOTE: The file should be made executable by using the command `chmod -R 777 vsdsynth`
+
+`./vsdsynth`
+
+
+
 3. There are three general cases. 
 
 I. The script takes an input argument which is cvs file. So, we need to check if the user has provided an argument or not. 
@@ -65,11 +72,31 @@ I. The script takes an input argument which is cvs file. So, we need to check if
 
 ![](images/1_1.3.png)
 
+4. Finally, we need to source the Tcl script by passing the required csv file as
+```
+tclsh vsdsynth.tcl $argv[1]
+```
+
 # Day-2
+
+## Create Variables
+First, the csv file is converted into matrix and the variables are created. 
 
 ![](images/2_2.1.png)
 
+## Checking if the files and directories exists or not.
+
+After the variables are created, we check if the required directory and file exists within the specified path or not. This can be seen in the following picture.
+
 ![](images/2_2.2.png)
+
+In case files are not present or found within specified path then we specify an error and stop the execution.
+
+## Convert constraints.csv file into matrix object
+
+Further, complex matrix processing is done to constraints.csv file to obtain various necessary informations as follows:
+
+![](images/2_2.3.png)
 
 
 # Day-3
