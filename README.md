@@ -100,6 +100,21 @@ Further, complex matrix processing is done to constraints.csv file to obtain var
 
 
 # Day-3
+
+The main task for the third day is to read the provided constraints.csv file and generate a SDC file which is induatry standard format. We write TCL script to read the clock constraints as well as input constraints from the constraints.csv file and generate SDC file. 
+We also had to identify bussed and non-bussed input ports before generating SDC file. For bussed ports, we add an `*` at the end of the port. The following screenshot shows that our script ran successfully.
+
+![](images/2_3.1.png)
+
+Here, we can differentiate the bussed and non-bussed ports.
+![](images/2_3.2.png)
+
+The following snipet shows the generated SDC file. We can see that the multi-bit ports has `*` at the end.
+
+![](images/3_3.3.png)
+
+The nexe step includes the processing of the constraint.csv file for the output constraints.
+
 # Day-4
 # Day-5
 
