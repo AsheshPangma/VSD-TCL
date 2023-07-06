@@ -52,11 +52,11 @@ echo "						******** A vlsisystemdesign.com initiative ********"
 echo ""
 ```
 
-You can run the command by typing the following command in the prompt. NOTE: The file should be made executable by using the command `chmod -R 777 vsdsynth`
+You can run the command by typing the following command in the prompt. 
 
 `./vsdsynth`
 
-
+NOTE: The file should be made executable by using the command `chmod -R 777 vsdsynth`
 
 3. There are three general cases. 
 
