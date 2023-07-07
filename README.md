@@ -104,10 +104,10 @@ Further, complex matrix processing is done to constraints.csv file to obtain var
 The main task for the third day is to read the provided constraints.csv file and generate a SDC file which is induatry standard format. We write TCL script to read the clock constraints as well as input constraints from the constraints.csv file and generate SDC file. 
 We also had to identify bussed and non-bussed input ports before generating SDC file. For bussed ports, we add an `*` at the end of the port. The following screenshot shows that our script ran successfully.
 
-![](images/2_3.1.png)
+![](images/3_3.1.png)
 
 Here, we can differentiate the bussed and non-bussed ports.
-![](images/2_3.2.png)
+![](images/3_3.2.png)
 
 The following snipet shows the generated SDC file. We can see that the multi-bit ports has `*` at the end.
 
@@ -116,5 +116,21 @@ The following snipet shows the generated SDC file. We can see that the multi-bit
 The nexe step includes the processing of the constraint.csv file for the output constraints.
 
 # Day-4
+
+Similar to processing clock and input constraints, we write a TCL script to read the output constraints from the constraints.csv file and dump it into the SDC file generated in industry standard format.
+
+![](images/4_4.1.png)
+
+## Yosys
+Yosys is an open-source RTL synthesis tool that takes RTL description as an input and generates gate-level netlist. It supports technology mapping, optimization, and formal verification. It also includes scripting interface, integrates with other EDA tools and is widely used in academia and industry for digital design tasks.
+
+The next step is to create scripts for synthesis and running it on Yosys. Firstly, we need to check if all the hierarchy is present before we move to synthesis.
+The following snippet shows hierarchy check that fails as the specified module is not found in the netlist.
+![](images/4_4.2.png)
+
+We added the module to in the netlist and got our hiererchy check to pass as shown in the following snippet.
+
+![](images/4_4.3.png)
+
 # Day-5
 
