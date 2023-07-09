@@ -134,3 +134,12 @@ We added the module to in the netlist and got our hiererchy check to pass as sho
 
 # Day-5
 
+![](images/5_5.1.png)
+
+![](images/5_5.2.png)
+
+![](images/5_5.3.png)
+
+![](images/5_5.4.png)
+
+![](images/5_5.5.png)
