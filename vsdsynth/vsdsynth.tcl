@@ -3,6 +3,8 @@
 #------------- Check whether vsdsynth usage is correct or not ---------------#
 #----------------------------------------------------------------------------#
 
+
+set enable_prelayout_timing 1
 #----------------------------------------------------------------------------------------------------------------------------------------------#
 #---- Converts .csv to matrix and creates initial variables "DesignName OutputDirectory NetlistDirectory EarlyLibraryPath LateLibraryPath -----#
 #----------------------------------------------------------------------------------------------------------------------------------------------#
@@ -246,8 +248,402 @@ set i [expr {$i+1}]
 
 
 
+#---------------------------------------------------------------------------------------------------------#
+#----------------------------------------- Output Constraints --------------------------------------------#
+#------------------------------ Create output delay and load constraints ---------------------------------#
+#---------------------------------------------------------------------------------------------------------#
 
 
+set output_early_rise_delay_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}] early_rise_delay] 0] 0]
+set output_early_fall_delay_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}] early_fall_delay] 0] 0]
+set output_late_rise_delay_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}] late_rise_delay] 0] 0]
+set output_late_fall_delay_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}] late_fall_delay] 0] 0]
+
+set output_load_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}] load] 0] 0]
+set related_clock [lindex [lindex [constraints search rect $clock_start_column $input_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}] clocks] 0] 0]
+
+set i [expr {$output_ports_start+1}]
+set end_of_ports [expr {$number_of_rows-1}]
+#puts "\nINFO-SDC: Working on IO constraints...."
+puts "\nINFO-SDC: Categorizing output ports as bits and bussed"
+
+
+#--------------------- differentiating output ports as bussed and bits ------------------------------------#
+
+while { $i < $end_of_ports } {
+set netlist [glob -dir $NetlistDirectory *.v]
+set tmp_file [open /tmp/1 w]
+foreach f $netlist {
+        set fd [open $f]
+        #puts "reading file $f"
+        while {[gets $fd line] != -1} {
+                set pattern1 " [constraints get cell 0 $i];"
+                if {[regexp -all -- $pattern1 $line]} {
+                        #puts "pattern1 \"$pattern1\" found and matching line in verilog file \"$f\" is \"$line\""
+                        set pattern2 [lindex [split $line ";"] 0]
+                        #puts "Creating pattern2 by splitting pattern1 using semi-colon as delimiter => \"$pattern2\""
+                        if {[regexp -all {output} [lindex [split $pattern2 "\S+"] 0]]} {
+                                #puts "Out of all patterns, \"$pattern2\" has matching string \"input\". So, preserving this line and ignoring others"
+                                set s1 "[lindex [split $pattern2 "\S+"] 0] [lindex [split $pattern2 "\S+"] 1] [lindex [split $pattern2 "\S+"] 2]"
+                                #puts "printing first 3 elements of pattern2 as \"$s1\" using space delimiter"
+                                puts -nonewline $tmp_file "\n[regsub -all {\s+} $s1 " "]"
+                                #puts "replace multiple spaces in s1 by single space and reformat as \"[regsub -all {\s+} $s1 " "]\""
+                                }
+                }
+        }
+        close $fd
+}
+close $tmp_file
+
+set tmp_file [open /tmp/1 r]
+
+#puts "reading [read $tmp_file]"
+#puts "reading /tmp/1 file as [split [read $tmp_file] \n]"
+#puts "sorting /tmp/1 contents as [lsort -unique [split [read $tmp_file] \n ]]"
+#puts "joining /tmp/1 as [join [lsort -unique [split [read $tmp_file] \n ]] \n]"
+
+set tmp2_file [open /tmp/2 w]
+puts -nonewline $tmp2_file "[join [lsort -unique [split [read $tmp_file] \n ]] \n]"
+close $tmp_file
+close $tmp2_file
+
+set tmp2_file [open /tmp/2 r]
+#puts "count is [llength [read $tmp2_file]]"
+set count [llength [read $tmp2_file]]
+#puts "Splitting content of tmp_2 using space and counting number of elements as $count"
+if { $count > 2 } {
+        set op_ports [concat [constraints get cell 0 $i]*]
+        #puts "\nbussed"
+} else {
+        set op_ports [constraints get cell 0 $i]
+        #puts "\nnot bussed"
+}
+
+#puts "\ninput port name is $inp_ports since count is $count\n"
+
+puts -nonewline $sdc_file "\nset_output_delay -clock \[get_clocks [constraints get cell $related_clock $i]\] -min -rise -source_latency_included [constraints get cell $output_early_rise_delay_start $i] \[get_ports $op_ports\]"
+puts -nonewline $sdc_file "\nset_output_delay -clock \[get_clocks [constraints get cell $related_clock $i]\] -min -fall -source_latency_included [constraints get cell $output_early_fall_delay_start $i] \[get_ports $op_ports\]"
+puts -nonewline $sdc_file "\nset_output_delay -clock \[get_clocks [constraints get cell $related_clock $i]\] -max -rise -source_latency_included [constraints get cell $output_late_rise_delay_start $i] \[get_ports $op_ports\]"
+puts -nonewline $sdc_file "\nset_output_delay -clock \[get_clocks [constraints get cell $related_clock $i]\] -max -fall -source_latency_included [constraints get cell $output_late_fall_delay_start $i] \[get_ports $op_ports\]"
+puts -nonewline $sdc_file "\nset_load [constraints get cell $output_load_start $i] \[get_ports $op_ports\]"
+
+set i [expr {$i+1}]
+}
+
+close $tmp2_file
+close $sdc_file
+
+puts "\nInfo: SDC Created. Please use constraints in path $OutputDirectory/$DesignName.sdc"
+
+
+#----------------------------------------------------------------------------------------------#
+#------------------------------------ Hierarchy Check -----------------------------------------#
+#----------------------------------------------------------------------------------------------#
+
+puts "\nInfo: Creating hierarchy check script to be used by Yosys"
+set data "read_liberty -lib -ignore_miss_dir -setattr blackbox ${LateLibraryPath}"
+set filename "$DesignName.hier.ys"
+set fileId [open $OutputDirectory/$filename "w"]
+puts -nonewline $fileId $data
+
+set netlist [glob -dir $NetlistDirectory *.v]
+foreach f $netlist {
+	set data $f
+	puts -nonewline $fileId "\nread_verilog $f"
+}
+
+puts -nonewline $fileId "\nhierarchy -check"
+close $fileId
+
+puts "\nclose \"$OutputDirectory/$filename\"\n"
+puts "\nChecking hirearchy..."
+set my_err [catch { exec yosys -s $OutputDirectory/$DesignName.hier.ys >& $OutputDirectory/$DesignName.hierarchy_check.log} msg]
+#puts "err flag is $my_err"
+
+if {$my_err} {
+	set filename "$OutputDirectory/$DesignName.hierarchy_check.log"
+	puts "log filename is $filename"
+	set pattern {referenced in module}
+	set count 0
+	set fid [open $filename r]
+	while {[gets $fid line] != -1} {
+		incr count [regexp -all -- $pattern $line]
+		if {[regexp -all -- $pattern $line]} {
+			puts "\nError: module [lindex $line 2] is not part of design $DesignName. Please correct RTL in the path '$NetlistDirectory'"
+			puts "\nInfo: Hierarchy check FAIL"
+		}
+	}
+	close $fid
+} else {
+	puts "\nInfo: Hierarchy check PASS"
+}
+puts "\nInfo: Please find hierarchy check details in [file normalize $OutputDirectory/$DesignName.hierarchy_check.log] for more info"
+
+
+
+#------------------------------------------------------------------------------------------------#
+#-------------------------------- Main Synthesis Script -----------------------------------------#
+#------------------------------------------------------------------------------------------------#
+
+puts "\nInfo: Creating main synthesis script to be used by Yosys"
+set data "read_liberty -lib -ignore_miss_dir -setattr blackbox ${LateLibraryPath}"
+set filename "$DesignName.ys"
+set fieldId [open $OutputDirectory/$filename "w"]
+puts -nonewline $fileId $data
+
+set netlist [glob -dir $NetlistDirectory *.v]
+foreach f $netlist {
+	set data $f
+	puts -nonewline $fileId "\nread_verilog $f"
+}
+puts -nonewline $fileId "\nhierarchy -top $DesignName"
+puts -nonewline $fileId "\nsynth -top $DesignName"
+puts -nonewline $fileId "\nsplitnets -ports -format ___\ndfflibmap -liberty ${LateLibraryPath}\nopt"
+puts -nonewline $fileId "\nabc -liberty ${LateLibraryPath}"
+puts -nonewline $fileId "\nflatten"
+puts -nonewline $fileId "\nclean -purge\niopadmap -outpad BUFX2 A:Y -bits\nopt\nclean"
+puts -nonewline $fileId "\nwrite_verilog $OutputDirectory/$DesignName.synth.v"
+close $fileId
+puts "\nInfo: Synthesis script created and can be accessec from path $OutputDirectory/$DesignName.ys"
+
+puts "\nInfo: Running Synthesis........"
+
+
+
+#------------------------------------------------------------------------------------------------#
+#------------------------------ Run Synthesis script using Yosys --------------------------------#
+#------------------------------------------------------------------------------------------------#
+
+if {[catch { exec yosys -s $OutputDirectory/$DesignName.ys >& $OutputDirectory/$DesignName.synthesis.log} msg]} {
+	puts "\nError: Synthesis failed due to errors. Please refer to log $OutputDirectory/$DesignName.synthesis.log for errors"
+	exit
+} else {
+	puts "\nInfo: Synthesis finished successfully"
+}
+puts "\nInfo: Please refer to log $OutputDirectory/$DesignName.synthesis.log"
+
+
+
+#------------------------------------------------------------------------------------------------#
+#------------------------ Edit synth.v to be usable by Opentimer --------------------------------#
+#------------------------------------------------------------------------------------------------#
+
+set fileId [open /tmp/1 "w"]
+puts -nonewline $fileId [exec grep -v -w "*" $OutputDirectory/$DesignName.synth.v]
+close $fileId
+
+set output [open $OutputDirectory/$DesignName.final.synth.v "w"]
+
+set filename "/tmp/1"
+set fid [open $filename r]
+while {[gets $fid line] != -1} {
+	puts -nonewline $output [string map {"\\" ""} $line]
+	puts -nonewline $output "\n"
+}
+close $fid
+close $output
+
+puts "\nInfo: Please find the synthesized netlist for $DesignName at below path. You can use this netlist for STA or PNR"
+puts "\n$OutputDirectory/$DesignName.final.synth.v"
+
+
+
+
+
+#------------------------------------------------------------------------------------------------#
+#-------------------------- Static Timing Analysis using Opentimer ------------------------------#
+#------------------------------------------------------------------------------------------------#
+
+puts "\nInfo: Timing Analysis Started....."
+puts "\nInfo: Initializing number of threads, libraries, sdc verilog netlist path...."
+source /home/vsduser/vsdsynth/procs/reopenStdout.proc
+source /home/vsduser/vsdsynth/procs/set_num_threads.proc
+reopenStdout $OutputDirectory/$DesignName.conf
+set_multi_cpu_usage -localCpu 4
+
+
+source /home/vsduser/vsdsynth/procs/read_lib.proc
+read_lib -early /home/vsduser/vsdsynth/osu018_stdcells.lib
+
+read_lib -late /home/vsduser/vsdsynth/osu018_stdcells.lib
+
+source /home/vsduser/vsdsynth/procs/read_verilog.proc
+read_verilog $OutputDirectory/$DesignName.final.synth.v
+
+
+source /home/vsduser/vsdsynth/procs/read_sdc.proc
+read_sdc $OutputDirectory/$DesignName.sdc
+reopenStdout /dev/tty
+
+if {$enable_prelayout_timing == 1} {
+	puts "\nInfo: enable_prelayout_timing is $enable_prelayout_timing. Enabling zero-wire load parasitics"
+	set spef_file [open $OutputDirectory/$DesignName.spef w]
+	puts $spef_file "*SPEF \"IEEE 1481-1998\" "
+	puts $spef_file "*DESIGN \"$DesignName\" "
+	puts $spef_file "*DATE \"Fri July 7 2023\" "
+	puts $spef_file "*VENDOR \"TAU 2015 Contest\" "
+	puts $spef_file "*PROGRAM \"Benchmark Parasitic Generator\" "
+	puts $spef_file "*VERSION \"0.0\" "
+	puts $spef_file "*DESIGN_FLOW \"NETLIST_TYPE_VERILOG\" "
+	puts $spef_file "*DIVIDER / "
+	puts $spef_file "*DELIMITER ; "
+	puts $spef_file "*BUS_DELIMITER [ ] "
+	puts $spef_file "*T_UNIT 1 PS "
+	puts $spef_file "*C_UNIT 1 FF "
+	puts $spef_file "*R_UNIT 1 KOHM "
+	puts $spef_file "*L_UNIT UH "
+}
+close $spef_file
+
+set conf_file [open $OutputDirectory/$DesignName.conf a]
+puts $conf_file "set_spef_fpath $OutputDirectory/$DesignName.spef "
+puts $conf_file "init_timer "
+puts $conf_file "report_timer "
+puts $conf_file "report_wns "
+puts $conf_file "report_worst_paths -numPaths 10000 "
+close $conf_file 
+
+set tcl_precision 3
+set time_elapsed_in_us [time {exec /home/vsduser/OpenTimer-1.0.5/bin/OpenTimer < $OutputDirectory/$DesignName.conf >& $OutputDirectory/$DesignName.results} 1]
+puts "time_elapsed_in_us is $time_elapsed_in_us"
+set time_elapsed_in_sec "[expr {[lindex $time_elapsed_in_us 0]/100000}]sec"
+puts "time_elapsed_in_sec is $time_elapsed_in_sec"
+puts "\nInfo: STA finished in $time_elapsed_in_sec seconds"
+puts "\nInfo: Refer to $OutputDirectory/$DesignName.results for warning and errors"
+
+#set tcl_precision 3
+puts "tcl_precicion is $tcl_precision"
+
+
+#------------------------- find worst output violation -----------------------------#
+
+set worst_RAT_slack "-"
+set report_file [open $OutputDirectory/$DesignName.results r]
+puts "report_file is $OutputDirectory/$DesignName.results"
+set pattern {RAT}
+puts "pattern is $pattern"
+while {[gets $report_file line] != -1} {
+	if {[regexp $pattern \"pattern $line]} {
+		puts "pattern \"$pattern\" found in \"$line\""
+		puts "old worst_RAT_slack is $worst_RAT_slack"
+		set worst_RAT_slack "[expr {[lindex $line 3]/1000}]ns"
+		puts "part1 is [lindex $line 3]"
+		puts "new worst_RAT_slack is $worst_RAT_slack"
+		puts "breaking"
+		break
+	} else {
+		continue
+	}
+}
+close $report_file
+
+#--------------------- find number of output violation ------------------------------#
+
+set report_file [open $OutputDirectory/$DesignName.results r]
+set count 0
+puts "Initial count is $count"
+puts "begin_count"
+while {[gets $report_file line] != -1} {
+	incr count [regexp -all -- $pattern $line]
+}
+set Number_output_violations $count
+puts "Number_output_violations is $Number_output_violations"
+close $report_file
+
+#------------------------- find worst setup violation -------------------------------#
+
+set worst_negative_setup_slack "-"
+set report_file [open $OutputDirectory/$DesignName.results r]
+set pattern {Setup}
+while {[gets $report_file line] != -1} {
+	if {[regexp $pattern $line]} {
+		set worst_negative_setup_slack "[expr {[lindex $line 3]/1000}]ns"
+		break
+	} else {
+		continue
+	}
+}
+close $report_file
+
+
+#------------------------- find number of setup violation -------------------------------#
+
+set report_file [open $OutputDirectory/$DesignName.results r]
+set count 0
+while {[gets $report_file line] != -1} {
+        incr count [regexp -all -- $pattern $line]
+}
+set Number_of_setup_violations $count
+close $report_file
+
+
+#---------------------------- find worst hold violation ---------------------------------#
+
+set worst_negative_hold_slack "-"
+set report_file [open $OutputDirectory/$DesignName.results r]
+set pattern {Hold}
+while {[gets $report_file line] != -1} {
+        if {[regexp $pattern $line]} {
+                set worst_negative_hold_slack "[expr {[lindex $line 3]/1000}]ns"
+                break
+        } else {
+                continue
+        }
+}
+close $report_file
+
+
+#------------------------- find number of instances --------------------------------#
+
+set pattern {Hold}
+set report_file [open $OutputDirectory/$DesignName.results r]
+while {[gets $report_file line] != -1} {
+        if {[regexp -all -- $pattern $line]} {
+                set Instance_count [lindex [join $line ""] 4 ]
+                puts "pattern \"$pattern\" found at line \"$line\" "
+		break
+        } else {
+                continue
+        }
+}
+close $report_file
+
+
+#------------------------- find number of hold violation --------------------------------#
+
+set report_file [open $OutputDirectory/$DesignName.results r]
+set count 0
+while {[gets $report_file line] != -1} {
+        incr count [regexp -all -- $pattern $line]
+}
+set Number_of_hold_violations $count
+close $report_file
+
+
+puts "DesignName is \{$DesignName\}"
+puts "time_elapsed_in_sec is \{$time_elapsed_in_sec\}"
+puts "Tnstance_count is \{$Instance_count\}"
+puts "worst_negative_setup_slack is \{$worst_negative_setup_slack\}"
+puts "Number_of_setup_violations is \{$Number_of_setup_violations\}"
+puts "worst_negative_hold_slack is \{$worst_negative_hold_slack\}"
+puts "Number_of_hold_violations is \{$Number_of_hold_violations\}"
+puts "worst_RAT_slack is \{$worst_RAT_slack\}"
+puts "Number_output_violations is \{$Number_output_violations\}"
+
+puts "\n"
+puts "					        	**** PRELAYOUT TIMING RESULT ****					"
+set formatStr {%15s%15s%15s%15s%15s%15s%15s%15s%15s}
+
+puts [format $formatStr "-----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
+puts [format $formatStr "Design Name" "Runtime" "Instance count" "WNS setup" "FEP Setup" "WNS hold" "FEP Hold" "WNS RAT" "FEP RAT"]
+puts [format $formatStr "-----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
+
+foreach design_name $DesignName runtime $time_elapsed_in_sec instance_count $Instance_count wns_setup $worst_negative_setup_slack fep_setup $Number_of_setup_violations wns_hold $worst_negative_hold_slack fep_hold $Number_of_hold_violations wns_rat $worst_RAT_slack fep_rat $Number_output_violations {
+	puts [format $formatStr $design_name $runtime $instance_count $wns_setup $fep_setup $wns_hold $fep_hold $wns_rat $fep_rat]
+}
+
+puts [format $formatStr "-----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
+puts "\n"
 
 
 
