@@ -290,7 +290,7 @@ close $tmp2_file
 ```
 
 #### 5.5 
-```proc
+```t
 set ot_timing_file [open $sdc_dirname/$sdc_filename.timing w]
 set timing_file [open /tmp/3 r]
 while {[gets $timing_file line] != -1} {
