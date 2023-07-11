@@ -371,13 +371,47 @@ puts $conf_file "report_worst_paths -numPaths 10000 "
 close $conf_file 
 ```
 
-![](images/5_5.2.png)
+## Quality of Results (QOR)
 
-![](images/5_5.3.png)
+Now we have managed to generate all the required files for OpenTimer tool for performing STA. We run the Opentimer tool using the following snippet:
+```t
+set tcl_precision 3
+set time_elapsed_in_us [time {exec /home/vsduser/OpenTimer-1.0.5/bin/OpenTimer < $OutputDirectory/$DesignName.conf >& $OutputDirectory/$DesignName.results} 1]
+puts "time_elapsed_in_us is $time_elapsed_in_us"
+set time_elapsed_in_sec "[expr {[lindex $time_elapsed_in_us 0]/100000}]sec"
+puts "time_elapsed_in_sec is $time_elapsed_in_sec"
+puts "\nInfo: STA finished in $time_elapsed_in_sec seconds"
+puts "\nInfo: Refer to $OutputDirectory/$DesignName.results for warning and errors"
+```
 
-![](images/5_5.4.png)
+After successfully running the STA using OpenTimer, logs and output are saved in the file `.results`. We need to write scripts to pull out the necessary outputs trom the `.results` file and display it in suitable format.
+
+We write scripts to pull out the necessary information from the obtained result such as worst output violation, number of output violations, worst setup viloation, number of setup violations, worst hold violations and number of hold violations as well as number of instances. We make use of unique patterns associated with the results to pull out the necessary informations.
+
+The following script is used to give the output a suitable format for displaying the result.
+
+```
+puts "\n"
+puts "					        	**** PRELAYOUT TIMING RESULT ****					"
+set formatStr {%15s%15s%15s%15s%15s%15s%15s%15s%15s}
+
+puts [format $formatStr "-----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
+puts [format $formatStr "Design Name" "Runtime" "Instance count" "WNS setup" "FEP Setup" "WNS hold" "FEP Hold" "WNS RAT" "FEP RAT"]
+puts [format $formatStr "-----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
+
+foreach design_name $DesignName runtime $time_elapsed_in_sec instance_count $Instance_count wns_setup $worst_negative_setup_slack fep_setup $Number_of_setup_violations wns_hold $worst_negative_hold_slack fep_hold $Number_of_hold_violations wns_rat $worst_RAT_slack fep_rat $Number_output_violations {
+	puts [format $formatStr $design_name $runtime $instance_count $wns_setup $fep_setup $wns_hold $fep_hold $wns_rat $fep_rat]
+}
+
+puts [format $formatStr "-----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
+puts "\n"
+```
 
 ### Final outout of the TCL box
 
 ![](images/5_5.5.png)
 
+# Acknowledgement
+
+* [Kunal Ghosh](https://github.com/kunalg123/), Co-founder, [VSD vorp. Pvt. Ltd.](https://www.vlsisystemdesign.com/)
+* Geetima Kachari, TA
