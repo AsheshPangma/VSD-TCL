@@ -113,7 +113,7 @@ The following snipet shows the generated SDC file. We can see that the multi-bit
 
 ![](images/3_3.3.png)
 
-The nexe step includes the processing of the constraint.csv file for the output constraints.
+The next step includes the processing of the constraint.csv file for the output constraints.
 
 # Day-4
 
@@ -132,9 +132,192 @@ We added the module to in the netlist and got our hiererchy check to pass as sho
 
 ![](images/4_4.3.png)
 
-# Day-5
+After the hirerarchy passed, we ran synthesis using Yosys with the provided netlist. As can be seen from the following snippet, synthesis ran successfully.
 
 ![](images/5_5.1.png)
+
+# Day-5
+
+## Opentimer and Procs
+
+Opentimer is an open-source tool developed by Tsung Wei Huan. It is used for STA analysis of the synthesized design. To generate the input file in the format accepted by OpenTimer, we made use of procs. Procs are an external tcl file that performs specific operations as described when it is sourced to the main tcl file. It is very much similar to the functions on Python programming. In this workshop, we have written several procs such as reopenStdout, read_lib, set_multi_cpu_usage, read_verilog and read_sdc. 
+For example, once the proc is sourced in the main tcl script, it will be executed referring to the specific proc with provided arguments. After the execution, the main tcl script will be left with the output of the proc. Some of the procs used in this workshop are discussed below:
+### 1. reopenStdout
+```
+proc reopenStdout {file} {
+    close stdout
+    open $file w       
+}
+```
+### 2. set_num_threads
+```
+proc set_multi_cpu_usage {args} {
+        array set options {-localCpu <num_of_threads> -help "" }
+        #foreach {switch value} [array get options] {
+        #puts "Option $switch is $value"
+        #}
+        while {[llength $args]} {
+        #puts "llength is [llength $args]"
+        #puts "lindex 0 of \"$args\" is [lindex $args 0]"
+                switch -glob -- [lindex $args 0] {
+                -localCpu {
+                           #puts "old args is $args"
+                           set args [lassign $args - options(-localCpu)]
+                           #puts "new args is \"$args\""
+                           puts "set_num_threads $options(-localCpu)"
+                          }
+                -help {
+                           #puts "old args is $args"
+                           set args [lassign $args - options(-help) ]
+                           #puts "new args is \"$args\""
+                           puts "Usage: set_multi_cpu_usage -localCpu <num_of_threads>"
+                      }
+                }
+        }
+}
+```
+
+### 3. read_lib
+```
+proc read_lib args {
+	array set options {-late <late_lib_path> -early <early_lib_path> -help ""}
+	while {[llength $args]} {
+		switch -glob -- [lindex $args 0] {
+		-late {
+			set args [lassign $args - options(-late) ]
+			puts "set_late_celllib_fpath $options(-late)"
+		      }
+		-early {
+			set args [lassign $args - options(-early) ]
+			puts "set_early_celllib_fpath $options(-early)"
+		       }
+		-help {
+			set args [lassign $args - options(-help) ]
+			puts "Usage: read_lib -late <late_lib_path> -early <early_lib_path>"
+			puts "-late <provide late library path>"
+			puts "-early <provide early library path>"
+		      }	
+		default break
+		}
+	}
+}
+
+```
+
+### 4. read_verilog
+```
+proc read_verilog {arg1} {
+puts "set_verilog_fpath $arg1"
+}
+```
+
+### 5. read_sdc
+This is a large proc and thus we discuss it in parts for better understanding and explanation. The main purpose of this proc is to convetr the SDC file into OpenTimer format.
+
+#### 5.1 
+```
+proc read_sdc {arg1} {
+set sdc_dirname [file dirname $arg1]
+set sdc_filename [lindex [split [file tail $arg1] .] 0 ]
+set sdc [open $arg1 r]
+set tmp_file [open /tmp/1 w]
+
+puts -nonewline $tmp_file [string map {"\[" "" "\]" " "} [read $sdc]]     
+close $tmp_file
+}
+```
+#### 5.2 Converting create_clock constraints
+```
+set tmp_file [open /tmp/1 r]
+set timing_file [open /tmp/3 w]
+set lines [split [read $tmp_file] "\n"]
+set find_clocks [lsearch -all -inline $lines "create_clock*"]
+foreach elem $find_clocks {
+	set clock_port_name [lindex $elem [expr {[lsearch $elem "get_ports"]+1}]]
+	set clock_period [lindex $elem [expr {[lsearch $elem "-period"]+1}]]
+	set duty_cycle [expr {100 - [expr {[lindex [lindex $elem [expr {[lsearch $elem "-waveform"]+1}]] 1]*100/$clock_period}]}]
+	puts $timing_file "clock $clock_port_name $clock_period $duty_cycle"
+	}
+close $tmp_file
+```
+#### 5.3 Converting set_clock_latency constraints
+```
+set find_keyword [lsearch -all -inline $lines "set_clock_latency*"]
+set tmp2_file [open /tmp/2 w]
+set new_port_name ""
+foreach elem $find_keyword {
+        set port_name [lindex $elem [expr {[lsearch $elem "get_clocks"]+1}]]
+	if {![string match $new_port_name $port_name]} {
+        	set new_port_name $port_name
+        	set delays_list [lsearch -all -inline $find_keyword [join [list "*" " " $port_name " " "*"] ""]]
+        	set delay_value ""
+        	foreach new_elem $delays_list {
+        		set port_index [lsearch $new_elem "get_clocks"]
+        		lappend delay_value [lindex $new_elem [expr {$port_index-1}]]
+        	}
+		puts -nonewline $tmp2_file "\nat $port_name $delay_value"
+	}
+}
+
+close $tmp2_file
+set tmp2_file [open /tmp/2 r]
+puts -nonewline $timing_file [read $tmp2_file]
+close $tmp2_file
+```
+#### 5.4 converting set_clock_transition constraints
+```
+set find_keyword [lsearch -all -inline $lines "set_clock_transition*"]
+set tmp2_file [open /tmp/2 w]
+set new_port_name ""
+foreach elem $find_keyword {
+        set port_name [lindex $elem [expr {[lsearch $elem "get_clocks"]+1}]]
+        if {![string match $new_port_name $port_name]} {
+		set new_port_name $port_name
+		set delays_list [lsearch -all -inline $find_keyword [join [list "*" " " $port_name " " "*"] ""]]
+        	set delay_value ""
+        	foreach new_elem $delays_list {
+        		set port_index [lsearch $new_elem "get_clocks"]
+        		lappend delay_value [lindex $new_elem [expr {$port_index-1}]]
+        	}
+        	puts -nonewline $tmp2_file "\nslew $port_name $delay_value"
+	}
+}
+
+close $tmp2_file
+set tmp2_file [open /tmp/2 r]
+puts -nonewline $timing_file [read $tmp2_file]
+close $tmp2_file
+```
+
+#### 5.5 
+```proc
+set ot_timing_file [open $sdc_dirname/$sdc_filename.timing w]
+set timing_file [open /tmp/3 r]
+while {[gets $timing_file line] != -1} {
+        if {[regexp -all -- {\*} $line]} {
+                set bussed [lindex [lindex [split $line "*"] 0] 1]
+                set final_synth_netlist [open $sdc_dirname/$sdc_filename.final.synth.v r]
+                while {[gets $final_synth_netlist line2] != -1 } {
+                        if {[regexp -all -- $bussed $line2] && [regexp -all -- {input} $line2] && ![string match "" $line]} {
+                        puts -nonewline $ot_timing_file "\n[lindex [lindex [split $line "*"] 0 ] 0 ] [lindex [lindex [split $line2 ";"] 0 ] 1 ] [lindex [split $line "*"] 1 ]"
+                        } elseif {[regexp -all -- $bussed $line2] && [regexp -all -- {output} $line2] && ![string match "" $line]} {
+                        puts -nonewline $ot_timing_file "\n[lindex [lindex [split $line "*"] 0 ] 0 ] [lindex [lindex [split $line2 ";"] 0 ] 1 ] [lindex [split $line "*"] 1 ]"
+                        }
+                }
+        } else {
+        puts -nonewline $ot_timing_file  "\n$line"
+        }
+}
+
+close $timing_file
+puts "set_timing_fpath $sdc_dirname/$sdc_filename.timing"
+```
+
+The output of the read_sdc proc is the timing file which is shown by the following snippet. This is the required Opentimer format.
+
+![](images/5_5.1.1.png)
+
+All the procs need to be sourced so that they can be called in the main file. 
 
 ![](images/5_5.2.png)
 
