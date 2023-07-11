@@ -4,8 +4,7 @@ set sdc_filename [lindex [split [file tail $arg1] .] 0 ]
 set sdc [open $arg1 r]
 set tmp_file [open /tmp/1 w]
 
-puts -nonewline $tmp_file [string map {"\[" "" "\]" " "} [read $sdc]]    
-} 
+puts -nonewline $tmp_file [string map {"\[" "" "\]" " "} [read $sdc]]     
 close $tmp_file
 
 #-----------------------------------------------------------------------------#

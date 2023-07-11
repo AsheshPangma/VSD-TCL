@@ -290,7 +290,9 @@ close $tmp2_file
 ```
 
 #### 5.5 
-```t
+We need to make sure that all the bussed inputs and outputs receive the same constraints on each pin. For this we make use the following code.
+
+```
 set ot_timing_file [open $sdc_dirname/$sdc_filename.timing w]
 set timing_file [open /tmp/3 r]
 while {[gets $timing_file line] != -1} {
@@ -317,7 +319,57 @@ The output of the read_sdc proc is the timing file which is shown by the followi
 
 ![](images/5_5.1.1.png)
 
-All the procs need to be sourced so that they can be called in the main file. 
+We need ot source all the procs in the main file so that they can be called. The following snippet is used to do so:
+```t
+puts "\nInfo: Timing Analysis Started....."
+puts "\nInfo: Initializing number of threads, libraries, sdc verilog netlist path...."
+source /home/vsduser/vsdsynth/procs/reopenStdout.proc
+source /home/vsduser/vsdsynth/procs/set_num_threads.proc
+reopenStdout $OutputDirectory/$DesignName.conf
+set_multi_cpu_usage -localCpu 4
+
+source /home/vsduser/vsdsynth/procs/read_lib.proc
+read_lib -early /home/vsduser/vsdsynth/osu018_stdcells.lib
+read_lib -late /home/vsduser/vsdsynth/osu018_stdcells.lib
+
+source /home/vsduser/vsdsynth/procs/read_verilog.proc
+read_verilog $OutputDirectory/$DesignName.final.synth.v
+
+source /home/vsduser/vsdsynth/procs/read_sdc.proc
+read_sdc $OutputDirectory/$DesignName.sdc
+reopenStdout /dev/tty
+``` 
+
+### Creating the spef file and config file
+```
+if {$enable_prelayout_timing == 1} {
+	puts "\nInfo: enable_prelayout_timing is $enable_prelayout_timing. Enabling zero-wire load parasitics"
+	set spef_file [open $OutputDirectory/$DesignName.spef w]
+	puts $spef_file "*SPEF \"IEEE 1481-1998\" "
+	puts $spef_file "*DESIGN \"$DesignName\" "
+	puts $spef_file "*DATE \"Fri July 7 2023\" "
+	puts $spef_file "*VENDOR \"TAU 2015 Contest\" "
+	puts $spef_file "*PROGRAM \"Benchmark Parasitic Generator\" "
+	puts $spef_file "*VERSION \"0.0\" "
+	puts $spef_file "*DESIGN_FLOW \"NETLIST_TYPE_VERILOG\" "
+	puts $spef_file "*DIVIDER / "
+	puts $spef_file "*DELIMITER ; "
+	puts $spef_file "*BUS_DELIMITER [ ] "
+	puts $spef_file "*T_UNIT 1 PS "
+	puts $spef_file "*C_UNIT 1 FF "
+	puts $spef_file "*R_UNIT 1 KOHM "
+	puts $spef_file "*L_UNIT UH "
+}
+close $spef_file
+
+set conf_file [open $OutputDirectory/$DesignName.conf a]
+puts $conf_file "set_spef_fpath $OutputDirectory/$DesignName.spef "
+puts $conf_file "init_timer "
+puts $conf_file "report_timer "
+puts $conf_file "report_wns "
+puts $conf_file "report_worst_paths -numPaths 10000 "
+close $conf_file 
+```
 
 ![](images/5_5.2.png)
 
@@ -325,4 +377,7 @@ All the procs need to be sourced so that they can be called in the main file.
 
 ![](images/5_5.4.png)
 
+### Final outout of the TCL box
+
 ![](images/5_5.5.png)
+
