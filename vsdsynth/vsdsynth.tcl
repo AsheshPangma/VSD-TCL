@@ -523,7 +523,7 @@ puts "report_file is $OutputDirectory/$DesignName.results"
 set pattern {RAT}
 puts "pattern is $pattern"
 while {[gets $report_file line] != -1} {
-	if {[regexp $pattern \"pattern $line]} {
+	if {[regexp $pattern $line]} {
 		puts "pattern \"$pattern\" found in \"$line\""
 		puts "old worst_RAT_slack is $worst_RAT_slack"
 		set worst_RAT_slack "[expr {[lindex $line 3]/1000}]ns"
@@ -595,11 +595,11 @@ close $report_file
 
 #------------------------- find number of instances --------------------------------#
 
-set pattern {Hold}
+set pattern {Num of gates}
 set report_file [open $OutputDirectory/$DesignName.results r]
 while {[gets $report_file line] != -1} {
         if {[regexp -all -- $pattern $line]} {
-                set Instance_count [lindex [join $line ""] 4 ]
+                set Instance_count [lindex [join $line " "] 4 ]
                 puts "pattern \"$pattern\" found at line \"$line\" "
 		break
         } else {
@@ -622,7 +622,7 @@ close $report_file
 
 puts "DesignName is \{$DesignName\}"
 puts "time_elapsed_in_sec is \{$time_elapsed_in_sec\}"
-puts "Tnstance_count is \{$Instance_count\}"
+puts "Instance_count is \{$Instance_count\}"
 puts "worst_negative_setup_slack is \{$worst_negative_setup_slack\}"
 puts "Number_of_setup_violations is \{$Number_of_setup_violations\}"
 puts "worst_negative_hold_slack is \{$worst_negative_hold_slack\}"

@@ -319,7 +319,7 @@ The output of the read_sdc proc is the timing file which is shown by the followi
 
 ![](images/5_5.1.1.png)
 
-We need ot source all the procs in the main file so that they can be called. The following snippet is used to do so:
+We need to source all the procs in the main file so that they can be called. The following snippet is used to do so:
 ```t
 puts "\nInfo: Timing Analysis Started....."
 puts "\nInfo: Initializing number of threads, libraries, sdc verilog netlist path...."
